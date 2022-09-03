@@ -1,0 +1,4 @@
+WINDOWS r
+STRING python X:/Projects/duckyhue/duckyhue.py -D
+ENTER
+WINDOWS DOWN
