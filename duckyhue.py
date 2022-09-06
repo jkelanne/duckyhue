@@ -1,13 +1,13 @@
 
 from phue import Bridge
 from pynput import keyboard
-import sys, getopt, os
+import sys, getopt, os, time
 import zc.lockfile
 from appdirs import *
 
 class DuckyHue:
 	def __init__(self):
-		### SET LOCKFILE ###
+		# Set lockfile so that we don't run multiple instances of the script
 		appname = "DuckyHue"
 		author = "null_ptr"
 		lockpath = user_data_dir(appname, author)
@@ -21,6 +21,7 @@ class DuckyHue:
 			print("PROCESS IS ALREADY RUNNING!");
 			sys.exit(2)
 
+		# Initialize variables and settings
 		b = Bridge('192.168.68.112')
 		b.connect()
 		# b.get_api()
@@ -28,10 +29,23 @@ class DuckyHue:
 		self.lights = b.get_light_objects('id')
 		self.brightness = b.get_light(2, 'bri')
 		self.colortemp = self.lights[2].colortemp
-		self.listener = keyboard.Listener(on_press=self.on_press)
-    		# on_release=on_release)
+		self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
+		self.keyboard_modifiers = {'ctrl_l': False, 'shift': False, 'alt_l': False }
+
+
+	def run(self):
 		self.listener.start()
 		self.listener.join()
+
+
+	def on_release(self, key):
+		try:
+			k = key.char # Single-char keys
+		except:
+			k = key.name # Other keys
+
+		if k in self.keyboard_modifiers.keys():
+			self.keyboard_modifiers[k] = False
 
 	def on_press(self,key):
 		if key == keyboard.Key.esc:
@@ -42,68 +56,58 @@ class DuckyHue:
 		except:
 			k = key.name # Other keys
 		
+		if k in self.keyboard_modifiers.keys():
+			self.keyboard_modifiers[k] = True
+
 		if k in ['f13']:
-			self.bridge.set_light(2, 'on', True)
+			self.bridge.set_light(2, 'on', not self.bridge.get_light(2, 'on'))
 		if k in ['f14']:
-			self.bridge.set_light(2, 'on', False)
+			self.bridge.set_light(3, 'on', not self.bridge.get_light(3, 'on'))
+			
 		if k in ['f15']:
 			self.brightness += 5
 			if self.brightness >= 254:
 				self.brightness = 254
-			self.bridge.set_light(2, 'bri', self.brightness)
-			print("Brghtness set to: {}".format(self.bridge.get_light(2, 'bri')))
+			self.bridge.set_light([2,3], 'bri', self.brightness)
 		
 		if k in ['f16']:
 			self.brightness -= 5
 			if self.brightness <= 1:
 				self.brightness = 1
-			self.bridge.set_light(2, 'bri', self.brightness)
-			print("Brghtness set to: {}".format(self.bridge.get_light(2, 'bri')))
+			self.bridge.set_light([2,3], 'bri', self.brightness)
 
 		if k in ['f22']:
 			self.colortemp += 5
-			self.lights[2].colortemp = self.colortemp
-			print("colormode: {}\ncolortemp: {} ({}K)".format(self.lights[2].colormode, self.lights[2].colortemp, self.lights[2].colortemp_k))
+			self.bridge.set_light([2,3], 'ct', self.colortemp)
 		if k in ['f23']:
 			self.colortemp -= 5
-			self.lights[2].colortemp = self.colortemp
-			print("colormode: {}\ncolortemp: {} ({}K)".format(self.lights[2].colormode, self.lights[2].colortemp, self.lights[2].colortemp_k))
+			self.bridge.set_light([2,3], 'ct', self.colortemp)
+		if k in ['f17'] and self.keyboard_modifiers['alt_l']:
+			self.bridge.set_light(4, 'on', not self.bridge.get_light(4, 'on'))
 
-		print('Key pressed: ' + k)
+		# Cosy warm
+		if k in ['f20']:
+			self.bridge.set_light([2,3], 'ct', 350)
+			time.sleep(0.4)
+			self.bridge.set_light([2,3], 'bri', 164)
+			
+		# Cold
+		if k in ['f21']:
+			self.bridge.set_light([2,3], 'ct', 250)
+			time.sleep(0.4)
+			self.bridge.set_light([2,3], 'bri', 254)
 
 def main(argv):
 	try:
-		opts, args = getopt.getopt(argv, "tTDsv", ["test"])
+		opts, args = getopt.getopt(argv, "D")
 	except getopt.GetoptError:
-		print('duckyhue -t')
+		print('duckyhue -D')
 		sys.exit(2)
 
 	for opt, arg in opts:
-		if opt == '-t':
-			print('Setting lights ON')
-			b = Bridge('192.168.68.112')
-			b.connect()
-			b.get_api()
-
-			b.set_light(2, 'on', True)
-
-		if opt == '-T':
-			print('Setting lights OFF')
-			b = Bridge('192.168.68.112')
-			b.connect()
-			b.get_api()
-
-			b.set_light(2, 'on', False)
 		if opt == '-D':
 			d = DuckyHue()
-		if opt == '-s':
-			b = Bridge('192.168.68.112')
-			b.connect()
-			b.get_api()
-			print("Something: \nbrightness: {}".format(b.get_light(2, 'bri')))
-			lights = b.get_light_objects('id')
-			print("Something else: {}".format(lights))
-			print("colormode: {}\ncolortemp: {} ({}K)".format(lights[2].colormode, lights[2].colortemp, lights[2].colortemp_k))
+			d.run()
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
